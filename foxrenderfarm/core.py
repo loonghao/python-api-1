@@ -73,7 +73,7 @@ class API(object):
 
         try:
             all_data = json.loads(request_data)
-            LOGGER.info(all_data)
+            LOGGER.info(pprint.pformat(all_data))
             return all_data
         except:
             return {}
@@ -238,6 +238,7 @@ class Fox(API):
         else:
             return []
 
+    @entity_data
     def get_tasks(self, task_id=None, project_name=None, has_frames=0, task_filter=None):
         if task_filter is None:
             task_filter = {}
@@ -288,7 +289,7 @@ class Fox(API):
                 result[i] = False
         return result
 
-    def download(self, task_id, local_path, **kwargs):
+    def download(self, task_id, local_path):
 
         transmit_type = "download_files"
         task = self.get_tasks(task_id)

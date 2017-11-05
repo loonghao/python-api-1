@@ -1,5 +1,5 @@
 # Fox Render Farm / Renderbus cloud rendering Python API
-We provide a simple Python-based API for using our cloud rendering service. This is the official API that is maintained by Fox Render Farm / Renderbus RD team. The API has been tested ok with python2.7.10 and requests 2.11.1
+We provide a simple Python-based API for using our cloud rendering service. This is the official API that is maintained by Fox Render Farm / Renderbus R&D team
 
 The latest version can always be found at
 https://github.com/renderbus/python-api
@@ -20,6 +20,7 @@ Sending 1 request per 10 seconds should be ok.
 
 - Login in our cloud server account first, some information such as access key, you need ask for our support team.
 ```py
+from foxrenderfarm import Fox
 fox = Fox(render_server="www5.renderbus.com", account="XXX", access_key="XXX")
 ```
 

@@ -43,9 +43,9 @@ class FoxConfig(_RvOs):
 
     def get_rayvision_app(self):
         if self.is_win:
-            return os.path.join(self.root, "rayvision", "windows", "rayvision_transmitter.exe")
+            return os.path.join(self.root, "vendor", "rayvision", "windows", "rayvision_transmitter.exe")
         else:
-            return os.path.join(self.root, "rayvision", "centos", "rayvision_transmitter")
+            return os.path.join(self.root, "vendor", "rayvision", "centos", "rayvision_transmitter")
 
 
 if __name__ == '__main__':
