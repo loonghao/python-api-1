@@ -4,9 +4,6 @@ We provide a simple Python-based API for using our cloud rendering service. This
 The latest version can always be found at
 https://github.com/renderbus/python-api
 
-## Requirement
-- requests (We already test ok with requests 2.11.1)
-
 ## Supporting Software
 - Maya
 - Houdini

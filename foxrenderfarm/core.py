@@ -1,74 +1,89 @@
-# ! /usr/bin/env python
-# coding=utf-8
-import requests
+# -*- coding: utf-8 -*-
+# Copyright (C) 2017 RayVision - All Rights Reserved.
+# Confidential and proprietary.
+# Unauthorized usage of this file, via any medium is strictly prohibited.
+
+# Copyright (C) 2017 Pixomondo - All Rights Reserved.
+# Confidential and proprietary.
+# Unauthorized usage of this file, via any medium is strictly prohibited.
+
+""".. moduleauthor:: Long Hao <hao.long@pixomondo.com>
+"""
+import copy
 import json
+import logging
 import os
 import pprint
-import copy
 import sys
-import time
+import urllib2
+
+from foxrenderfarm.config import FoxConfig
+from foxrenderfarm.error import AuthenticationFault
+from foxrenderfarm.error import RayVisionArgsError
+from foxrenderfarm.error import RayVisionError
+from foxrenderfarm.vendor.attrdict import AttrDict
+
+__version__ = "1.0.1"
+__version__ += ".pxo"  # PIXOMONDO: CHANGE
+
+LOGGER = logging.getLogger('foxrenderfarm')
 
 
-class RvOs(object):
-    is_win = 0
-    is_linux = 0
-    is_mac = 0
+def entity_data(function_name):
+    def _deco(*args, **kwargs):
+        lists = []
+        return_value = function_name(*args, **kwargs)
+        if isinstance(return_value, list):
+            for r in return_value:
+                if isinstance(r, dict):
+                    lists.append(AttrDict(r))
+            return lists
+        elif isinstance(return_value, dict):
+            return AttrDict(return_value)
+        else:
+            return return_value
 
-    if sys.platform.startswith("win"):
-        os_type = "win"
-        is_win = 1
-    elif sys.platform.startswith("linux"):
-        os_type = "linux"
-        is_linux = 1
-    else:
-        os_type = "mac"
-        is_mac = 1
+    return _deco
 
 
-class Api(object):
+class API(object):
+    def __init__(self, render_server, logging_level="DEBUG"):
+        self.settings = FoxConfig()
+        self.url = self.settings.get_api_url(render_server)
+        LOGGER.setLevel(logging_level)
 
-    def __init__(self, render_server, debug=0):
-        self.url = 'https://%s/api/v2/task' % (render_server)
-        self.headers = {"Content-Type": "application/json"}
-        self.debug = debug
-
+    @entity_data
     def post(self, data):
-        time.sleep(10)
-
-        if self.debug:
-            print "\n"
-            print "URL:"
-            print self.url
-            print "\n"
-            print "headers:"
-            pprint.pprint(self.headers)
-            print "\n"
-            print "Post data:"
-            pprint.pprint(data)
-            print "\n"
-
+        LOGGER.debug("URL:%s" % self.url)
+        LOGGER.debug("Post data:%s" % data)
         if isinstance(data, dict):
             data = json.dumps(data)
-        r = requests.post(self.url, headers=self.headers,
-                          data=data)
-        if r.status_code == 200:
-            if r.json()["head"]["result"] != "0":
-                print "[ERROR]: " + r.json()["head"]["error_message"]
-            return r.json()
-        elif r.status_code == 405:
-            print r.status_code
-            raise Exception("Connect server error.")
-        else:
-            print r.status_code
-            raise Exception("Server internal error.")
+        try:
+            request = urllib2.Request(self.url)
+            request.add_header('content-TYPE', 'application/json')
+            response = urllib2.urlopen(request, data)
+            request_data = response.read()
+        except urllib2.HTTPError, err:
+            if err.code == 401:
+                raise RayVisionError("Error: HTTP Status Code 401. Authentication with the Web Service failed."
+                                     " Please ensure that the authentication credentials are set, are correct,"
+                                     " and that authentication mode is enabled.")
+            else:
+                request_data = err.read()
+
+        try:
+            all_data = json.loads(request_data)
+            LOGGER.info(all_data)
+            return all_data
+        except:
+            return {}
 
 
-class Fox(Api, RvOs):
+class Fox(API):
     root = os.path.dirname(os.path.abspath(__file__))
 
-    def __init__(self, render_server, account, access_key, language="en",
-                 debug=0):
-        Api.__init__(self, render_server, debug=debug)
+    def __init__(self, render_server, account, access_key, language="en", debug="DEBUG"):
+        super(Fox, self).__init__(render_server, debug)
         self.data = {"head": {"access_key": access_key,
                               "account": account,
                               "msg_locale": language,
@@ -77,83 +92,60 @@ class Fox(Api, RvOs):
         self.login()
 
     def login(self):
-        result = self.get_users()
-        if result:
-            self.user_info = result[0]
-            self._init_upload_download_config()
+        user_info = self.get_users()
+        if user_info:
+            self._init_upload_download_config(user_info[0])
         else:
-            raise Exception("Login failed.")
+            raise AuthenticationFault("Login failed.")
 
-    def _init_upload_download_config(self):
-        if self.is_win:
-            self.rayvision_exe = os.path.join(self.root, "rayvision", "windows",
-                                              "rayvision_transmitter.exe")
-        else:
-            self.rayvision_exe = os.path.join(self.root, "rayvision", "centos",
-                                              "rayvision_transmitter")
-        self.account_id = self.user_info["id"]
-        self.upload_id = self.user_info["upload_id"]
-        self.download_id = self.user_info["download_id"]
-        self.transports = self.user_info["transports"]
+    def _init_upload_download_config(self, info):
+        self.app = self.settings.get_rayvision_app()
+        self.account_id = info.id
+        self.upload_id = info.upload_id
+        self.download_id = info.download_id
+        self.transports = info.transports
 
         if self.transports:
-            self.engine_type = self.transports[0]["engine"]
-            self.server_name = self.transports[0]["server"]
-            self.server_ip = self.transports[0]["ip"]
-            self.server_port = self.transports[0]["port"]
+            self.engine_type = self.transports[0].engine
+            self.server_name = self.transports[0].server
+            self.server_ip = self.transports[0].ip
+            self.server_port = self.transports[0].port
 
     def submit_task(self, **kwargs):
         data = copy.deepcopy(self.data)
-        if "action" in kwargs:
-            data["head"]["action"] = kwargs["action"]
+        submit_info = AttrDict(kwargs)
+        if "action" in submit_info:
+            data["head"]["action"] = submit_info.action
         else:
             data["head"]["action"] = "create_task"
 
-        if kwargs:
-            for i in kwargs:
-                data["body"][i] = kwargs[i]
-            if "project_name" not in kwargs:
-                raise Exception("Missing project_name args, please check.")
-            if "input_scene_path" not in kwargs:
-                raise Exception("Missing input_scene_path args, please check.")
-            if "frames" not in kwargs:
-                raise Exception("Missing frames, please check args.")
+        for i in submit_info:
+            data["body"][i] = submit_info[i]
+        if "project_name" not in submit_info:
+            raise RayVisionArgsError("Missing project_name args, please check.")
+        if "input_scene_path" not in submit_info:
+            raise RayVisionArgsError("Missing input_scene_path args, please check.")
+        if "frames" not in submit_info:
+            raise RayVisionArgsError("Missing frames, please check args.")
 
         data["body"]["input_scene_path"] = data["body"]["input_scene_path"].replace(":", "").replace("\\", "/")
         data["body"]["submit_account"] = data["head"]["account"]
 
-        project = self.get_projects(kwargs["project_name"])
+        project = self.get_projects(submit_info.project_name)
         if not project:
-            raise Exception("Project <%s> doesn't exists." % (kwargs["project_name"]))
-
-        plugins = project[0]["plugins"]
-        no_plugin = True
-        for i in plugins:
-            if i:
-                no_plugin = False
-                break
-        if no_plugin:
-            raise Exception("Project <%s> doesn't have any plugin settings." % (kwargs["project_name"]))
-
-        default_plugin = [i for i in plugins
-                          if "is_default" in i if i["is_default"] == '1']
-
-        if len(plugins) == 1:
-            default_plugin = plugins
-
-        if not default_plugin:
-            raise Exception("Project <%s> doesn't have a default plugin settings." % (kwargs["project_name"]))
-
-        data["body"]["cg_soft_name"] = default_plugin[0]["cg_soft_name"]
-        if "plugin_name" in default_plugin[0]:
-            data["body"]["plugin_name"] = default_plugin[0]["plugin_name"]
-
-        result = self.post(data)
-        if result["head"]["result"] == '0':
-            return int(result["body"]["data"][0]["task_id"])
-        else:
-            pprint.pprint(result)
-            return -1
+            raise RayVisionError("Project %s doesn't exists." % submit_info.project_name)
+        plugins = project[0].plugins
+        for plugin_info in plugins:
+            if plugin_info.is_default:
+                data["body"]["cg_soft_name"] = plugin_info.cg_soft_name
+                data["body"]["plugin_name"] = plugin_info.plugin_name
+                result = self.post(data)
+                LOGGER.info('job id: %s' % result.body.data[0].task_id)
+                if result.head.result == '0':
+                    return int(result.body.data[0].task_id)
+                else:
+                    pprint.pprint(result)
+                    return -1
 
     def submit_maya(self, **kwargs):
         return self.submit_task(**kwargs)
@@ -217,6 +209,7 @@ class Fox(Api, RvOs):
     def submit_blender(self, **kwargs):
         return self.submit_task(action="create_blender_task", **kwargs)
 
+    @entity_data
     def get_users(self, has_child_account=0):
         data = copy.deepcopy(self.data)
         data["head"]["action"] = "query_customer"
@@ -225,11 +218,13 @@ class Fox(Api, RvOs):
             data["body"]["login_name"] = data["head"]["account"]
 
         result = self.post(data)
-        if result["head"]["result"] == "0":
+        logging.info(result)
+        if result and result["head"]["result"] == "0":
             return result["body"]["data"]
         else:
             return []
 
+    @entity_data
     def get_projects(self, project_name=None):
         data = copy.deepcopy(self.data)
         data["head"]["action"] = "query_project"
@@ -243,7 +238,9 @@ class Fox(Api, RvOs):
         else:
             return []
 
-    def get_tasks(self, task_id=None, project_name=None, has_frames=0, task_filter={}):
+    def get_tasks(self, task_id=None, project_name=None, has_frames=0, task_filter=None):
+        if task_filter is None:
+            task_filter = {}
         data = copy.deepcopy(self.data)
         data["head"]["action"] = "query_task"
 
@@ -273,7 +270,7 @@ class Fox(Api, RvOs):
         for i in set(local_path_list):
             if os.path.exists(i):
                 local_path = i
-                cmd = "echo y | %s %s %s %s %s %s %s %s %s %s" % (self.rayvision_exe,
+                cmd = "echo y | %s %s %s %s %s %s %s %s %s %s" % (self.app,
                                                                   self.engine_type,
                                                                   self.server_name,
                                                                   self.server_ip,
@@ -283,8 +280,7 @@ class Fox(Api, RvOs):
                                                                   transmit_type,
                                                                   local_path,
                                                                   server_path)
-                if self.debug:
-                    print cmd
+                LOGGER.debug(cmd)
                 result[i] = True
                 sys.stdout.flush()
                 result[i] = os.system(cmd)
@@ -299,7 +295,7 @@ class Fox(Api, RvOs):
         if task:
             input_scene_path = task[0]["input_scene_path"]
             server_path = "%s_%s" % (task_id, os.path.splitext(os.path.basename(input_scene_path))[0].strip())
-            cmd = "echo y | %s %s %s %s %s %s %s %s %s %s" % (self.rayvision_exe,
+            cmd = "echo y | %s %s %s %s %s %s %s %s %s %s" % (self.app,
                                                               self.engine_type,
                                                               self.server_name,
                                                               self.server_ip,
@@ -309,31 +305,30 @@ class Fox(Api, RvOs):
                                                               transmit_type,
                                                               local_path,
                                                               server_path)
-            if self.debug:
-                print cmd
+            LOGGER.debug(cmd)
             sys.stdout.flush()
             return os.system(cmd)
         else:
             return False
 
     def get_server_files(self):
-        ''
+        pass
 
     def delete_server_files(self):
-        ''
+        pass
 
     """ NO 7.2.3
         :param project_name: the name of the project you want to create
         :param kwargs:  can be used to pass more arguments, not necessary
                         including project_path, render_os, remark, sub_account
-
     """
+
     def create_project(self, project_name, cg_soft_name, plugin_name="",
                        render_os="", **kwargs):
         data = copy.deepcopy(self.data)
         data["head"]["action"] = "create_project"
         if not render_os:
-            if self.is_win:
+            if self.settings.is_win:
                 render_os = "Windows"
             else:
                 render_os = "Linux"
@@ -341,7 +336,7 @@ class Fox(Api, RvOs):
         data["body"]["render_os"] = render_os
 
         if not project_name:
-            raise Exception("Missing project_name, please check")
+            raise RayVisionArgsError("Missing project_name, please check")
         data["body"]["project_name"] = project_name
         for key, value in kwargs.items():
             data["body"][key] = value
@@ -356,8 +351,9 @@ class Fox(Api, RvOs):
         else:
             return -1
 
-    def _message_output(self, msg_type=None, msg=None):
-        print "[{0}]: {1}".format(msg_type, msg)
+    @staticmethod
+    def _message_output(msg_type=None, msg=None):
+        LOGGER.info("[%s]: %s" % (msg_type, msg))
 
     """ NO: 7.2.2  Query plugins
         :param kwargs:  can be used to pass more arguments, not necessary
@@ -367,6 +363,7 @@ class Fox(Api, RvOs):
                 get_plugin(cg_soft_name="3ds Max 2010")
                 get_plugin(cg_soft_name="3ds Max 2010", plugin_name="finalrender 3.5sp6")
     """
+
     def get_plugins_available(self, **kwargs):
         data = copy.deepcopy(self.data)
         data["head"]["action"] = "query_plugin"
@@ -381,7 +378,8 @@ class Fox(Api, RvOs):
             self._message_output("ERROR", result["head"]["error_message"])
             return False
 
-    def _save_list2file(self, list_data, file_name, remark="\n"):
+    @staticmethod
+    def _save_list2file(list_data, file_name, remark="\n"):
         basedir = os.path.abspath(os.path.dirname(__file__))
         save_path = os.path.join(basedir, file_name)
         with open(save_path, "a+") as f:
@@ -397,8 +395,8 @@ class Fox(Api, RvOs):
         :param plugin_name:  the plugin you use
         :param is_default:  make it as default setting
         :param kwargs: can  be used to pass more arguments, not necessary
-
     """
+
     def add_project_config(self, project_id, cg_soft_name, plugin_name=None,
                            is_default=0, **kwargs):
         data = copy.deepcopy(self.data)
@@ -425,8 +423,8 @@ class Fox(Api, RvOs):
                           if not pass this argument it will delete all
                           you can use "get_project_info" to get config_id
         :param kwargs: can be used to pass more arguments, not necessary
-
     """
+
     def delete_project_config(self, project_id, config_id=None, **kwargs):
         data = copy.deepcopy(self.data)
         data["head"]["action"] = "operate_project"
@@ -455,8 +453,8 @@ class Fox(Api, RvOs):
         :param plugin_name:  the plugin you use
         :param is_default:  make it as default setting, just one default allowed
         :param kwargs: can  be used to pass more arguments, not necessary
-
     """
+
     def modify_project_config(self, project_id, config_id, cg_soft_name,
                               plugin_name=None, is_default=None, **kwargs):
         data = copy.deepcopy(self.data)
@@ -491,6 +489,7 @@ class Fox(Api, RvOs):
         Here some example::  restart_tasks("123", "0")
                              restart_tasks(["123", "456"], "3")
     """
+
     def restart_tasks(self, task_id, restart_type="0"):
         data = copy.deepcopy(self.data)
         data["head"]["action"] = "operate_task"
@@ -510,12 +509,12 @@ class Fox(Api, RvOs):
 
     """ NO 7.1.3 Stop the tasks
         :param task_id:  the tasks you what to pause
-
         Here some example::  stop_tasks(123)
                              stop_tasks("123")
                              stop_tasks(["123", "456"])
                              stop_tasks([123, 456])
     """
+
     def stop_tasks(self, task_id):
         data = copy.deepcopy(self.data)
         data["head"]["action"] = "operate_task"
@@ -534,12 +533,12 @@ class Fox(Api, RvOs):
 
     """ NO 7.1.3 Delete the tasks
         :param task_id:  the tasks you what to delete
-
         Here some example::  delete_tasks(123)
                              delete_tasks("123")
                              delete_tasks(["123", "456"])
                              delete_tasks([123, 456])
     """
+
     def delete_tasks(self, task_id):
         data = copy.deepcopy(self.data)
         data["head"]["action"] = "operate_task"
@@ -559,6 +558,7 @@ class Fox(Api, RvOs):
     """ Get the plugins of the project
         :param project_name:  the name of the project
     """
+
     def get_project_plugins_config(self, project_name):
         data = copy.deepcopy(self.data)
         data["head"]["action"] = "query_project"
