@@ -9,13 +9,18 @@
 
 """.. moduleauthor:: Long Hao <hao.long@pixomondo.com>
 """
+import Queue
 import copy
 import json
 import logging
 import os
 import pprint
+import ssl
+import subprocess
 import sys
+import threading
 import urllib2
+from functools import wraps
 
 from foxrenderfarm.config import FoxConfig
 from foxrenderfarm.error import AuthenticationFault
@@ -27,6 +32,18 @@ __version__ = "1.0.1"
 __version__ += ".pxo"  # PIXOMONDO: CHANGE
 
 LOGGER = logging.getLogger('foxrenderfarm')
+
+
+def sslwrap(func):
+    @wraps(func)
+    def bar(*args, **kw):
+        kw['ssl_version'] = ssl.PROTOCOL_TLSv1
+        return func(*args, **kw)
+
+    return bar
+
+
+ssl.wrap_socket = sslwrap(ssl.wrap_socket)
 
 
 def entity_data(function_name):
@@ -53,7 +70,7 @@ class API(object):
         LOGGER.setLevel(logging_level)
 
     @entity_data
-    def post(self, data):
+    def _post(self, data, q):
         LOGGER.debug("URL:%s" % self.url)
         LOGGER.debug("Post data:%s" % data)
         if isinstance(data, dict):
@@ -74,9 +91,17 @@ class API(object):
         try:
             all_data = json.loads(request_data)
             LOGGER.info(pprint.pformat(all_data))
+            q.put(all_data)
             return all_data
         except:
             return {}
+
+    @entity_data
+    def post(self, data):
+        q = Queue.Queue()
+        threading.Thread(target=self._post, args=(data, q)).start()
+        result = q.get()
+        return result
 
 
 class Fox(API):
@@ -264,34 +289,35 @@ class Fox(API):
         else:
             return []
 
-    def upload(self, local_path_list, server_path='/', **kwargs):
+    def upload(self, local_path_list, server_path='/'):
 
-        transmit_type = "upload_files"
+        transmit_type = self.settings.UPLOAD
         result = {}
-        for i in set(local_path_list):
-            if os.path.exists(i):
-                local_path = i
-                cmd = "echo y | %s %s %s %s %s %s %s %s %s %s" % (self.app,
-                                                                  self.engine_type,
-                                                                  self.server_name,
-                                                                  self.server_ip,
-                                                                  self.server_port,
-                                                                  self.upload_id,
-                                                                  self.account_id,
-                                                                  transmit_type,
-                                                                  local_path,
-                                                                  server_path)
-                LOGGER.debug(cmd)
-                result[i] = True
-                sys.stdout.flush()
-                result[i] = os.system(cmd)
-            else:
-                result[i] = False
+        if isinstance(local_path_list, list):
+            for i in set(local_path_list):
+                if os.path.exists(i):
+                    local_path = i
+                    cmd = "echo y | %s %s %s %s %s %s %s %s %s %s" % (self.app,
+                                                                      self.engine_type,
+                                                                      self.server_name,
+                                                                      self.server_ip,
+                                                                      self.server_port,
+                                                                      self.upload_id,
+                                                                      self.account_id,
+                                                                      transmit_type,
+                                                                      local_path,
+                                                                      server_path)
+                    LOGGER.debug(cmd)
+                    sys.stdout.flush()
+                    result[i] = self.subprocess_run(cmd)
+                else:
+                    result[i] = "upload fail"
+        else:
+            LOGGER.error("please use list []")
         return result
 
     def download(self, task_id, local_path):
-
-        transmit_type = "download_files"
+        transmit_type = self.settings.DOWNLOAD
         task = self.get_tasks(task_id)
         if task:
             input_scene_path = task[0]["input_scene_path"]
@@ -308,7 +334,7 @@ class Fox(API):
                                                               server_path)
             LOGGER.debug(cmd)
             sys.stdout.flush()
-            return os.system(cmd)
+            return self.subprocess_run(cmd)
         else:
             return False
 
@@ -356,15 +382,6 @@ class Fox(API):
     def _message_output(msg_type=None, msg=None):
         LOGGER.info("[%s]: %s" % (msg_type, msg))
 
-    """ NO: 7.2.2  Query plugins
-        :param kwargs:  can be used to pass more arguments, not necessary
-                        including cg_soft_name, plugin_name
-        Here some examples::
-                get_plugin()
-                get_plugin(cg_soft_name="3ds Max 2010")
-                get_plugin(cg_soft_name="3ds Max 2010", plugin_name="finalrender 3.5sp6")
-    """
-
     def get_plugins_available(self, **kwargs):
         data = copy.deepcopy(self.data)
         data["head"]["action"] = "query_plugin"
@@ -390,14 +407,6 @@ class Fox(API):
                 f.write(str(line) + "\n")
         print "[INFO]:" + save_path + " has saved."
 
-    """ NO 7.2.4 Add config for project
-        :param project_id:  the id of the existed project you choose
-        :param cg_soft_name:  the software you use
-        :param plugin_name:  the plugin you use
-        :param is_default:  make it as default setting
-        :param kwargs: can  be used to pass more arguments, not necessary
-    """
-
     def add_project_config(self, project_id, cg_soft_name, plugin_name=None,
                            is_default=0, **kwargs):
         data = copy.deepcopy(self.data)
@@ -418,13 +427,15 @@ class Fox(API):
         else:
             return False
 
-    """ NO 7.2.4 Delete config for project
-        :param project_id: the id of the existed project you choose
-        :param config_id: the id of configuration you want to delete
-                          if not pass this argument it will delete all
-                          you can use "get_project_info" to get config_id
-        :param kwargs: can be used to pass more arguments, not necessary
-    """
+    @staticmethod
+    def subprocess_run(command):
+        p = subprocess.Popen(command,
+                             stdin=subprocess.PIPE,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE,
+                             shell=True)
+        p.wait()
+        return p.stdout.readlines()
 
     def delete_project_config(self, project_id, config_id=None, **kwargs):
         data = copy.deepcopy(self.data)
@@ -444,17 +455,6 @@ class Fox(API):
         else:
             self._message_output("ERROR", result["head"]["error_message"])
             return False
-
-    """ NO 7.2.4 Modify config for project
-        :param project_id:  the id of the existed project you choose
-        :param config_id:  the id of configuration you want to delete
-                           if not pass this argument it will delete all
-                           you can use "get_projects" to get config_id
-        :param cg_soft_name:  the software you use
-        :param plugin_name:  the plugin you use
-        :param is_default:  make it as default setting, just one default allowed
-        :param kwargs: can  be used to pass more arguments, not necessary
-    """
 
     def modify_project_config(self, project_id, config_id, cg_soft_name,
                               plugin_name=None, is_default=None, **kwargs):
@@ -480,17 +480,6 @@ class Fox(API):
             self._message_output("ERROR", result["head"]["error_message"])
             return False
 
-    """ NO 7.1.3 Restart the tasks
-        :param task_id:  the tasks you what to restart
-        :param restart_type:  0 -- restart the failed frames
-                              1 -- restart the frames that give up
-                              2 -- restart the finished frames
-                              3 -- restart the start frames
-                              4 -- restart the waiting frames
-        Here some example::  restart_tasks("123", "0")
-                             restart_tasks(["123", "456"], "3")
-    """
-
     def restart_tasks(self, task_id, restart_type="0"):
         data = copy.deepcopy(self.data)
         data["head"]["action"] = "operate_task"
@@ -508,14 +497,6 @@ class Fox(API):
             self._message_output("ERROR", result["head"]["error_message"])
             return False
 
-    """ NO 7.1.3 Stop the tasks
-        :param task_id:  the tasks you what to pause
-        Here some example::  stop_tasks(123)
-                             stop_tasks("123")
-                             stop_tasks(["123", "456"])
-                             stop_tasks([123, 456])
-    """
-
     def stop_tasks(self, task_id):
         data = copy.deepcopy(self.data)
         data["head"]["action"] = "operate_task"
@@ -532,14 +513,6 @@ class Fox(API):
             self._message_output("ERROR", result["head"]["error_message"])
             return False
 
-    """ NO 7.1.3 Delete the tasks
-        :param task_id:  the tasks you what to delete
-        Here some example::  delete_tasks(123)
-                             delete_tasks("123")
-                             delete_tasks(["123", "456"])
-                             delete_tasks([123, 456])
-    """
-
     def delete_tasks(self, task_id):
         data = copy.deepcopy(self.data)
         data["head"]["action"] = "operate_task"
@@ -555,10 +528,6 @@ class Fox(API):
         else:
             self._message_output("ERROR", result["head"]["error_message"])
             return False
-
-    """ Get the plugins of the project
-        :param project_name:  the name of the project
-    """
 
     def get_project_plugins_config(self, project_name):
         data = copy.deepcopy(self.data)
