@@ -1,19 +1,8 @@
 # Fox Render Farm / Renderbus cloud rendering Python API
 We provide a simple Python-based API for using our cloud rendering service. This is the official API that is maintained by Fox Render Farm / Renderbus R&D team
 
-The latest version can always be found at
-https://github.com/renderbus/python-api
-
 ## Supporting Software
 - Maya
-- Houdini
-
-## Important Note
-Please don't send the requests to our web site too frequently. Or you might see below message
-
-`Error: The interval less than 10s from the last time`.
-
-Sending 1 request per 10 seconds should be ok.
 
 ## Submitting Maya Task Step
 - You must have a Fox Render Farm / Renderbus account to use our service, then create a project and select the plugins you want to use on our web site before Submitting.
