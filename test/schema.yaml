@@ -1,0 +1,9 @@
+api_version: v2
+
+render_server: https://{server}/api/v2/task
+
+transports:
+  engine: rayvision
+  ip: 111.111.111.111
+  port: 8885
+  server: ${FOX_SERVER}

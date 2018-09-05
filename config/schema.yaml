@@ -1,0 +1,4 @@
+api_version: v2
+
+render_server: https://{server}/api/v2/task
+
