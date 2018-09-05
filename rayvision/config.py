@@ -2,9 +2,11 @@
 """
 module author: Long Hao <hoolongvfx@gmail.com>
 """
+# Import built-in modules
 import os
 import sys
 
+# Import local modules
 import vendor.yaml as yaml
 from rayvision.logger import RayLogger
 from rayvision.vendor.addict import Dict
@@ -89,8 +91,3 @@ class FoxConfig(_RvOs):
                                 "rayvision",
                                 "centos",
                                 "rayvision_transmitter")
-
-
-if __name__ == '__main__':
-    l = RayLogger.configure()
-    l.info("aaa")

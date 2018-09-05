@@ -2,8 +2,10 @@
 # Copyright (C) 2017 RayVision - All Rights Reserved.
 # Confidential and proprietary.
 # Unauthorized usage of this file, via any medium is strictly prohibited.
-""".. moduleauthor:: Long Hao <hao.long@pixomondo.com>
 """
+module author: Long Hao <hoolongvfx@gmail.com>
+"""
+
 # Import built-in modules
 import copy
 import json
@@ -23,7 +25,6 @@ from rayvision.error import ERROR_FEEDBACK
 from rayvision.error import RayVisionArgsError
 from rayvision.error import RayVisionError
 
-
 LOGGER = RayLogger.configure(__name__)
 
 
@@ -37,8 +38,8 @@ class RayVisionAPI(object):
 
     @entity_data
     def _post(self, data):
-        LOGGER.debug("URL:%s" % self.url)
-        LOGGER.debug("Post data:%s" % data)
+        LOGGER.debug("URL:%s", self.url)
+        LOGGER.debug("Post data:%s", data)
         if isinstance(data, dict) or isinstance(data, Dict):
             data = json.dumps(data)
         try:
@@ -141,7 +142,7 @@ class RayVision(RayVisionAPI):
         project = self.get_projects(submit_info.project_name)
         if not project:
             raise RayVisionError(
-                "Project %s doesn't exists." % submit_info.project_name)
+                "Project {} doesn't exists.".format(submit_info.project_name))
         plugins = project[0].plugins
         for plugin_info in plugins:
             if plugin_info.is_default == "0":
@@ -186,14 +187,15 @@ class RayVision(RayVisionAPI):
         project = self.get_projects(submit_info.project_name)
         if not project:
             raise RayVisionError(
-                "Project <%s> doesn't exists." % submit_info.project_name)
+                "Project <{}> doesn't exists.".format(
+                    submit_info.project_name))
 
         plugins = project[0].plugins
         for i in plugins:
             if i:
                 raise RayVisionError(
-                    "Project <%s> doesn't have any plugin settings." %
-                    submit_info.project_name)
+                    "Project <{}> doesn't have any plugin settings.".format(
+                        submit_info.project_name))
 
         default_plugin = [
             i for i in plugins if "is_default" in i if i.is_default == '1'
@@ -204,8 +206,8 @@ class RayVision(RayVisionAPI):
 
         if not default_plugin:
             raise RayVisionError(
-                "Project <%s> doesn't have a default plugin settings." %
-                submit_info.project_name)
+                "Project <{}> doesn't have a default plugin settings.".format(
+                    submit_info.project_name))
 
         data.body.cg_soft_name = default_plugin[0].cg_soft_name
         if "plugin_name" in default_plugin[0]:
@@ -285,7 +287,7 @@ class RayVision(RayVisionAPI):
         transmit_type = self.settings.UPLOAD
         if os.path.exists(local_file_path):
             local_path = local_file_path
-            LOGGER.info("start upload:%s" % local_path)
+            LOGGER.info("start upload:%s", local_path)
             command = "{self.app} {self.engine_type}" \
                       " {self.server_name} {self.server_ip}" \
                       " {self.server_port} {self.upload_id}" \
@@ -302,7 +304,7 @@ class RayVision(RayVisionAPI):
             return True
         raise RayVisionError(
             "Unanticipated error occurred uploading, \n"
-            "Maybe this file does not exist: %s" % local_file_path)
+            "Maybe this file does not exist: %s", local_file_path)
 
     def upload_files(self,
                      local_path_list,
@@ -364,7 +366,7 @@ class RayVision(RayVisionAPI):
             self.subprocess_run(command)
             return True
         raise RayVisionError(
-            "Unanticipated error occurred download: %s" % task_id)
+            "Unanticipated error occurred download: {}".format(task_id))
 
     def get_server_files(self):
         pass
@@ -399,7 +401,7 @@ class RayVision(RayVisionAPI):
             project_id = int(result.body.project_id)
             self.add_project_config(
                 project_id, cg_soft_name, plugin_name, is_default=1)
-            LOGGER.info("Project ID: %s" % project_id)
+            LOGGER.info("Project ID: %s", project_id)
             return project_id
         else:
             raise RayVisionError("Create project failure")
@@ -426,7 +428,7 @@ class RayVision(RayVisionAPI):
                 f.write(remark)
             for line in list_data:
                 f.write(str(line) + "\n")
-        LOGGER.info("%s has saved." % save_path)
+        LOGGER.info("%s has saved.", save_path)
 
     def add_project_config(self,
                            project_id,
@@ -465,10 +467,10 @@ class RayVision(RayVisionAPI):
             line = line.strip()
             if line:
                 for feed_back in ERROR_FEEDBACK.keys():
-                    m = re.match(feed_back, line)
-                    if m:
+                    match = re.match(feed_back, line)
+                    if match:
                         raise RayVisionError(ERROR_FEEDBACK[feed_back])
-                LOGGER.info('RayVision subprogram output: [%s]' % line)
+                LOGGER.info('RayVision subprogram output: [%s]', line)
         p.wait()
         return p
 
@@ -530,7 +532,7 @@ class RayVision(RayVisionAPI):
 
         result = self.post(data=data)
         if result.head.result == "0":
-            LOGGER.info("task %s restart." % task_id)
+            LOGGER.info("task %s restart.", task_id)
             return True
         else:
             raise RayVisionError(result.head.error_message)
@@ -546,7 +548,7 @@ class RayVision(RayVisionAPI):
 
         result = self.post(data=data)
         if result.head.result == "0":
-            LOGGER.info("task %s paused." % task_id)
+            LOGGER.info("task %s paused.", task_id)
             return True
         else:
             raise RayVisionError(result.head.error_message)
@@ -562,7 +564,7 @@ class RayVision(RayVisionAPI):
 
         result = self.post(data=data)
         if result.head.result == "0":
-            LOGGER.info("task %s deleted." % task_id)
+            LOGGER.info("task %s deleted.", task_id)
             return True
         else:
             raise RayVisionError(result.head.error_message)
