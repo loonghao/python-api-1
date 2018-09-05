@@ -9,7 +9,7 @@ import vendor.yaml as yaml
 from rayvision.logger import RayLogger
 from rayvision.vendor.addict import Dict
 
-logger = RayLogger.configure("config")
+LOGGER = RayLogger.configure(__name__)
 
 
 def entity_data(function_name):
@@ -56,7 +56,7 @@ class FoxConfig(_RvOs):
             self._config_file = config_file
         else:
             self._config_file = os.path.join(self.root, "config", "schema.yaml")
-        logger.info("load config file: %s" % self._config_file)
+        LOGGER.info("load config file: %s" % self._config_file)
         with open(self._config_file, 'r') as f:
             self.data = yaml.load(f)
 

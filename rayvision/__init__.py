@@ -2,6 +2,4 @@
 """
 module author: Long Hao <hoolongvfx@gmail.com>
 """
-from rayvision import core
-
-reload(core)
+__version__ = "2.0.0"

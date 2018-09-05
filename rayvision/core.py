@@ -4,14 +4,13 @@
 # Unauthorized usage of this file, via any medium is strictly prohibited.
 """.. moduleauthor:: Long Hao <hao.long@pixomondo.com>
 """
+# Import built-in modules
 import copy
-# Import built-in modules.
 import json
 import logging
 import os
 import pprint
 import re
-# import ssl
 import subprocess
 import sys
 import urllib2
@@ -24,18 +23,8 @@ from rayvision.error import ERROR_FEEDBACK
 from rayvision.error import RayVisionArgsError
 from rayvision.error import RayVisionError
 
-__version__ = "2.0.0"
 
-logger = RayLogger.configure("api")
-
-# def _sslwrap(func):
-#     @wraps(func)
-#     def bar(*args, **kw):
-#         kw['ssl_version'] = ssl.PROTOCOL_TLSv1
-#         return func(*args, **kw)
-#     return bar
-
-# ssl.wrap_socket = _sslwrap(ssl.wrap_socket)
+LOGGER = RayLogger.configure(__name__)
 
 
 class RayVisionAPI(object):
@@ -44,12 +33,12 @@ class RayVisionAPI(object):
         self.settings = FoxConfig()
         self.render_server = render_server
         self.url = self.settings.get_api_url(render_server)
-        logger.setLevel(logging_level.upper())
+        LOGGER.setLevel(logging_level.upper())
 
     @entity_data
     def _post(self, data):
-        logger.debug("URL:%s" % self.url)
-        logger.debug("Post data:%s" % data)
+        LOGGER.debug("URL:%s" % self.url)
+        LOGGER.debug("Post data:%s" % data)
         if isinstance(data, dict) or isinstance(data, Dict):
             data = json.dumps(data)
         try:
@@ -68,7 +57,7 @@ class RayVisionAPI(object):
             else:
                 request_data = err.read()
         all_data = json.loads(request_data)
-        logger.debug(pprint.pformat(all_data))
+        LOGGER.debug(pprint.pformat(all_data))
         return all_data
 
     @entity_data
@@ -161,10 +150,10 @@ class RayVision(RayVisionAPI):
                 result = self.post(data)
                 if result.head.result == '0':
                     pprint.pprint(result)
-                    logger.info('job id: %s' % result.body.data[0].task_id)
+                    LOGGER.info('job id: %s' % result.body.data[0].task_id)
                     return int(result.body.data[0].task_id)
                 else:
-                    logger.debug(pprint.pformat(result))
+                    LOGGER.debug(pprint.pformat(result))
                     raise RayVisionError(result.head.error_message)
 
     def submit_maya(self, **kwargs):
@@ -296,7 +285,7 @@ class RayVision(RayVisionAPI):
         transmit_type = self.settings.UPLOAD
         if os.path.exists(local_file_path):
             local_path = local_file_path
-            logger.info("start upload:%s" % local_path)
+            LOGGER.info("start upload:%s" % local_path)
             command = "{self.app} {self.engine_type}" \
                       " {self.server_name} {self.server_ip}" \
                       " {self.server_port} {self.upload_id}" \
@@ -308,7 +297,7 @@ class RayVision(RayVisionAPI):
                                                             server_path=remote_path,
                                                             failure_count=failure_count,
                                                             keep_path=keep_path)
-            logger.debug(command)
+            LOGGER.debug(command)
             self.subprocess_run(command)
             return True
         raise RayVisionError(
@@ -337,15 +326,15 @@ class RayVision(RayVisionAPI):
                                                                     server_path=remote_path,
                                                                     failure_count=failure_count,
                                                                     keep_path=keep_path)
-                    logger.debug(command)
+                    LOGGER.debug(command)
                     sys.stdout.flush()
                     self.subprocess_run(command)
                     result[i] = True
                 else:
                     result[i] = "upload fail"
         else:
-            logger.error("please use list []")
-        logger.debug(pprint.pprint(result))
+            LOGGER.error("please use list []")
+        LOGGER.debug(pprint.pprint(result))
         return result
 
     def download(self,
@@ -371,7 +360,7 @@ class RayVision(RayVisionAPI):
                                                             server_path=remote_path,
                                                             failure_count=failure_count,
                                                             keep_path=keep_path)
-            logger.debug(command)
+            LOGGER.debug(command)
             self.subprocess_run(command)
             return True
         raise RayVisionError(
@@ -410,7 +399,7 @@ class RayVision(RayVisionAPI):
             project_id = int(result.body.project_id)
             self.add_project_config(
                 project_id, cg_soft_name, plugin_name, is_default=1)
-            logger.info("Project ID: %s" % project_id)
+            LOGGER.info("Project ID: %s" % project_id)
             return project_id
         else:
             raise RayVisionError("Create project failure")
@@ -437,7 +426,7 @@ class RayVision(RayVisionAPI):
                 f.write(remark)
             for line in list_data:
                 f.write(str(line) + "\n")
-        logger.info("%s has saved." % save_path)
+        LOGGER.info("%s has saved." % save_path)
 
     def add_project_config(self,
                            project_id,
@@ -479,7 +468,7 @@ class RayVision(RayVisionAPI):
                     m = re.match(feed_back, line)
                     if m:
                         raise RayVisionError(ERROR_FEEDBACK[feed_back])
-                logger.info('RayVision subprogram output: [%s]' % line)
+                LOGGER.info('RayVision subprogram output: [%s]' % line)
         p.wait()
         return p
 
@@ -496,7 +485,7 @@ class RayVision(RayVisionAPI):
 
         result = self.post(data=data)
         if result.head.result == "0":
-            logger.info("configuration delete")
+            LOGGER.info("configuration delete")
             return True
         else:
             raise RayVisionError(result.head.error_message)
@@ -524,7 +513,7 @@ class RayVision(RayVisionAPI):
 
         result = self.post(data=data)
         if result.head.result == "0":
-            logger.info("modify the configuration")
+            LOGGER.info("modify the configuration")
             return True
         else:
             raise RayVisionError(result.head.error_message)
@@ -541,7 +530,7 @@ class RayVision(RayVisionAPI):
 
         result = self.post(data=data)
         if result.head.result == "0":
-            logger.info("task %s restart." % task_id)
+            LOGGER.info("task %s restart." % task_id)
             return True
         else:
             raise RayVisionError(result.head.error_message)
@@ -557,7 +546,7 @@ class RayVision(RayVisionAPI):
 
         result = self.post(data=data)
         if result.head.result == "0":
-            logger.info("task %s paused." % task_id)
+            LOGGER.info("task %s paused." % task_id)
             return True
         else:
             raise RayVisionError(result.head.error_message)
@@ -573,7 +562,7 @@ class RayVision(RayVisionAPI):
 
         result = self.post(data=data)
         if result.head.result == "0":
-            logger.info("task %s deleted." % task_id)
+            LOGGER.info("task %s deleted." % task_id)
             return True
         else:
             raise RayVisionError(result.head.error_message)
@@ -584,7 +573,7 @@ class RayVision(RayVisionAPI):
         data.head.action = "query_project"
 
         if not project_name:
-            logger.warning("Missing project name")
+            LOGGER.warning("Missing project name")
             return plugins
 
         data.body.project_name = project_name
@@ -594,8 +583,8 @@ class RayVision(RayVisionAPI):
             plugins = result.body.data[0].plugins
 
         if result.head.result == "0":
-            logger.info("Query plugins config id:")
+            LOGGER.info("Query plugins config id:")
             return plugins
         else:
-            logger.warning(result.head.error_message)
+            LOGGER.warning(result.head.error_message)
             return plugins
